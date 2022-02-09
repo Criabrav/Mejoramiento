@@ -1,0 +1,107 @@
+from time import sleep
+import requests
+import math
+import random
+import serial
+import os
+import socket
+import subprocess
+import sys
+import pyrebase
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+import sys
+import signal
+import firebase
+import credentials
+
+#Instalacion de libreria pyrebase
+#subprocess.check_call([sys.executable,'-m','pip','install','pyrebase'])
+
+#Variables para almacenar datos recibidos del atmega
+temp=""
+hum=""
+pre=""
+
+# CODIGO PARA COMUNICAR CON UBIDOTS
+TOKEN = "BBFF-q5N1rTslEYg8YtnIoN1FMVUSzmbhLW"
+DEVICE_LABEL = "sistemacic"
+VARIABLE_LABEL_1 = "Temperatura"
+VARIABLE_LABEL_2 = "Humedad"
+VARIABLE_LABEL_3 = "Presion"
+
+
+def build_payload(variable_1, variable_2, variable_3, value_1, value_2, value_3):
+     print ("CONECTADO...")
+     payload = {variable_1: value_1,
+                variable_2: value_2,
+                variable_3: value_3,}
+                
+     return payload
+
+def post_request(payload):
+     # Creates the headers for the HTTP requests
+     url = "http://industrial.api.ubidots.com"  
+     url = "{}/api/v1.6/devices/{}".format(url, DEVICE_LABEL)
+     headers = {"X-Auth-Token": TOKEN, "Content-Type": "application/json"}
+     
+     # Makes the HTTP requests
+     status = 400
+     attempts = 0
+     while status >= 400 and attempts <= 5:
+         req = requests.post(url=url, headers=headers, json=payload)
+         status = req.status_code
+         attempts += 1
+         sleep(1)
+                
+     # Processes results
+     if status >= 400:
+         print("[ERROR] Could not send data after 5 attempts, please check \
+your token credentials and internet connection")
+         return False    
+     print("[INFO] request made properly, your device is updated")
+     return True
+    
+    
+    
+    
+#Habilito comunicacion serial
+ser = serial.Serial('/dev/ttyS1',9600)
+ser.flushInput()
+
+
+#COMUNICACION CON UBIDOTS   
+def ubidots():     
+    payload = build_payload(VARIABLE_LABEL_1, VARIABLE_LABEL_2, VARIABLE_LABEL_3,
+                           temp, hum, pre)
+    print("[INFO] Attemping to send data")
+    post_request(payload)
+    print("[INFO] finished")
+
+while True:
+    try: 
+       
+        #RECIBO DATOS DESDE EL ATMEGA
+        lineBytes = ser.readline()
+        line = lineBytes.decode('utf-8').strip()
+        if int(line)==2000:
+            lineBytes = ser.readline()
+            line = lineBytes.decode('utf-8').strip()
+            temp=line
+            print("Temperatura:"+line)
+        elif int(line)==3000:
+            lineBytes = ser.readline()
+            line = lineBytes.decode('utf-8').strip()
+            hum=line
+            print("Humedad:"+line)
+        elif int(line)==4000:
+            lineBytes = ser.readline()
+            line = lineBytes.decode('utf-8').strip()
+            pre=line
+            print("Presion:"+line)
+                
+    except KeyboardInterrupt:
+        break
+    
+    #COMUNICACION CON UBIDOTS        
+    ubidots()
